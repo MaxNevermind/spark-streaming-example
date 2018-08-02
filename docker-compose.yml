@@ -33,7 +33,7 @@ services:
     ports:
       - 8083:8083
     volumes:
-      - ./events:/usr/share/incoming-events
+      - ./:/usr/share/streaming_task
     environment:
       CONNECT_ZOOKEEPER_CONNECT: zookeeper:2181
       CONNECT_BOOTSTRAP_SERVERS: broker:9092

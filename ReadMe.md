@@ -32,7 +32,7 @@ Create Cassandra key space and table
 
 Add Kafka file source connector for incoming events
 
-`curl --header "Content-Type: application/json" --request POST --data '{"name":"FileStreamSourceConnector","config":{"connector.class":"org.apache.kafka.connect.file.FileStreamSourceConnector","tasks.max":"1","topic":"incoming-events","key.converter":"org.apache.kafka.connect.storage.StringConverter","value.converter":"org.apache.kafka.connect.storage.StringConverter","file":"/usr/share/incoming-events/events.json"}}' \
+`curl --header "Content-Type: application/json" --request POST --data '{"name":"FileStreamSourceConnector","config":{"connector.class":"org.apache.kafka.connect.file.FileStreamSourceConnector","tasks.max":"1","topic":"incoming-events","key.converter":"org.apache.kafka.connect.storage.StringConverter","value.converter":"org.apache.kafka.connect.storage.StringConverter","file":"/usr/share/streaming_task/events/events.json"}}' \
 http://localhost:8083/connectors`
 
 Start events generator

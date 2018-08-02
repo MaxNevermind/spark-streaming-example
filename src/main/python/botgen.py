@@ -1,4 +1,7 @@
+#!/usr/local/bin/python3
+
 import sys
+import os
 import json
 import random
 from datetime import datetime, timedelta
@@ -71,6 +74,7 @@ def do_generate(fd = None):
 
 def main(args):
     print("started with parameters :", args)
+    os.makedirs(os.path.dirname(args.file), exist_ok=True)
     if args.file:
         with open(args.file, 'w') as fd:
             do_generate(fd)
