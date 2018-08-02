@@ -2,7 +2,6 @@
 import java.lang
 import java.time.Instant
 
-import com.datastax.driver.core.Cluster
 import com.datastax.spark.connector.cql.CassandraConnector
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.spark.SparkConf

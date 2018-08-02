@@ -8,19 +8,16 @@ from datetime import datetime, timedelta
 import time
 
 #########################
-# Ad logs json generator
+# Ad event log generator
 #
 # Help : python botgen.py -h
 #
 # Examples :
-# Write log for 1 bot, 1000 users, 100 requestes/sec, duration 300 seconds
+# Write events to file data.json, 1 bot, duration 60 seconds
 #
-#   python botgen.py -b 1 -u 1000 -n 100 -d 300 -f data.json
+#   python botgen.py --bots 1 --duration 60 --file data.json
 #
-# Notes :
-#  bots have ip 172.20.X.X and make a transition  ~ 1 in sec
-#  users have ip 172.10.X.X and make a transition  ~ 4 in sec
-#
+
 
 # == generate content ids for bots and users
 # content ids [1000 .. 1020]
@@ -76,7 +73,7 @@ def main(args):
     print("started with parameters :", args)
     os.makedirs(os.path.dirname(args.file), exist_ok=True)
     if args.file:
-        with open(args.file, 'w') as fd:
+        with open(args.file, 'a') as fd:
             do_generate(fd)
     else:
         do_generate()
@@ -85,10 +82,10 @@ if __name__ == '__main__':
 
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('-d',  '--duration', type=int, default=5,     help="script running time in seconds")
+    parser.add_argument('-d',  '--duration', type=int, default=600,   help="script running time in seconds")
     parser.add_argument('-b',  '--bots',     type=int, default=1,     help="number of bots")
-    parser.add_argument('-u',  '--users',    type=int, default=60000, help="number of users")
-    parser.add_argument('-ru', '--freq',     type=int, default=1000,  help="number of requests for all users per second")
+    parser.add_argument('-u',  '--users',    type=int, default=60000, help="number of user ip addresses")
+    parser.add_argument('-ru', '--freq',     type=int, default=10,    help="number of requests for all users per second")
     parser.add_argument('-ub', '--bot_freq', type=int, default=10,    help="number of requests per bot per second")
     parser.add_argument('-f',  '--file',     type=str, default=None,  help="events file")
     args = parser.parse_args()
