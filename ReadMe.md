@@ -1,4 +1,4 @@
-#### Project setup
+### Project setup
 
 `git clone spark-streaming-example`
 
@@ -56,7 +56,7 @@ Check the result in Cassandra
 `SELECT * FROM standalone.blocked_ips LIMIT 10;`   
 
 
-#### Utility commands
+### Utility commands
 
 Connect to created container
 
