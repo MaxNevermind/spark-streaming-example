@@ -43,9 +43,6 @@ object StreamingApp {
 
 
   def createSsc(): StreamingContext = {
-
-    log.warn("----------------- KafkaBroker - " + KafkaBroker)
-
     val conf = new SparkConf()
       .setMaster("local[2]")
       .setAppName("StreamingApp")
