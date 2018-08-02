@@ -1,6 +1,6 @@
 ### Project setup
 
-`git clone spark-streaming-example`
+`git clone https://github.com/MaxNevermind/spark-streaming-example.git`
 
 `cd spark-streaming-example`
 
@@ -14,18 +14,21 @@ Create a topic for incoming events
 
 Create Cassandra key space and table
 
-docker exec -it cassandra /bin/bash
-cqlsh
-CREATE KEYSPACE standalone
+`docker exec -it cassandra /bin/bash`
+
+`cqlsh`
+
+`CREATE KEYSPACE standalone
   WITH REPLICATION = { 
    'class' : 'SimpleStrategy', 
    'replication_factor' : 1 
-  };
-CREATE TABLE standalone.blocked_ips (
+  };`
+  
+`CREATE TABLE standalone.blocked_ips (
    ip text PRIMARY KEY, 
    request_count int, 
    click_view_ratio float, 
-   categories_count int);
+   categories_count int);`
 
 Add Kafka file source connector for incoming events
 
