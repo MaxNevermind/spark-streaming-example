@@ -74,13 +74,9 @@ Check the result in Cassandra
 
 ## Utility commands
 
-Connect to created container
-
-`docker-compose exec broker /bin/bash`
-
 Get list of topics
 
-`docker-compose exec broker kafka-topics --list --zookeeper zookeeper:2181`
+`docker exec broker kafka-topics --list --zookeeper zookeeper:2181`
 
 Get the first 10 messages from a topic
 
@@ -88,5 +84,5 @@ Get the first 10 messages from a topic
 
 Reset offset for spark consumer
 
-`docker-compose exec broker kafka-consumer-groups --bootstrap-server broker:9092 --group spark_consumer --topic incoming-events --reset-offsets --to-earliest --execute`
+`docker exec broker kafka-consumer-groups --bootstrap-server broker:9092 --group spark_consumer --topic incoming-events --reset-offsets --to-earliest --execute`
 
