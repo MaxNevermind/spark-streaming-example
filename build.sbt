@@ -12,8 +12,8 @@ scalaVersion := "2.11.11"
 dependencyOverrides += "com.fasterxml.jackson.core" %  "jackson-core" % "2.6.5"
 dependencyOverrides += "com.fasterxml.jackson.core" %  "jackson-databind" % "2.6.5"
 
-//val scope = "compile"
-val scope = "provided"
+`val developmentMode = true
+val scope = if (developmentMode) "compile" else "provided"
 
 libraryDependencies += sparkCore % scope
 libraryDependencies += sparkSql % scope
@@ -31,17 +31,12 @@ val defaultMergeStrategy: String => MergeStrategy = {
   case PathList(ps @ _*) if Assembly.isReadme(ps.last) || Assembly.isLicenseFile(ps.last) =>
     MergeStrategy.rename
   case PathList("META-INF", xs @ _*) =>
-    (xs map {_.toLowerCase}) match {
-      case ("manifest.mf" :: Nil) | ("index.list" :: Nil) | ("dependencies" :: Nil) =>
-        MergeStrategy.discard
-      case ps @ (x :: xs) if ps.last.endsWith(".sf") || ps.last.endsWith(".dsa") =>
-        MergeStrategy.discard
-      case "plexus" :: xs =>
-        MergeStrategy.discard
-      case "services" :: xs =>
-        MergeStrategy.filterDistinctLines
-      case ("spring.schemas" :: Nil) | ("spring.handlers" :: Nil) =>
-        MergeStrategy.filterDistinctLines
+    xs map {_.toLowerCase} match {
+      case "manifest.mf" :: Nil | "index.list" :: Nil | "dependencies" :: Nil => MergeStrategy.discard
+      case ps @ x :: _ if ps.last.endsWith(".sf") || ps.last.endsWith(".dsa") => MergeStrategy.discard
+      case "plexus" :: _ => MergeStrategy.discard
+      case "services" :: _ => MergeStrategy.filterDistinctLines
+      case "spring.schemas" :: Nil | "spring.handlers" :: Nil => MergeStrategy.filterDistinctLines
       case _ => MergeStrategy.deduplicate
     }
   case _ => MergeStrategy.first
