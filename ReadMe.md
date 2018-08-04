@@ -13,13 +13,12 @@ This project uses and expects specified software to be installed on a runtime en
 
 ## Project setup
 
-`git clone https://github.com/MaxNevermind/spark-streaming-example.git`
-
-`cd spark-streaming-example`
-
-`docker-compose up -d`
-
-`sbt assembly`
+```
+git clone https://github.com/MaxNevermind/spark-streaming-example.git
+cd spark-streaming-example\
+sbt assembly
+docker-compose up -d
+```
 
 Create a topic for incoming events
 
@@ -27,21 +26,23 @@ Create a topic for incoming events
 
 Create Cassandra key space and table
 
-`docker exec -it cassandra /bin/bash`
+```
+docker exec -it cassandra /bin/bash
 
-`cqlsh`
+cqlsh
 
-`CREATE KEYSPACE standalone
+CREATE KEYSPACE standalone
   WITH REPLICATION = { 
    'class' : 'SimpleStrategy', 
    'replication_factor' : 1 
-  };`
+  };
   
-`CREATE TABLE standalone.blocked_ips (
+CREATE TABLE standalone.blocked_ips (
    ip text PRIMARY KEY, 
    request_count int, 
    click_view_ratio float, 
-   categories_count int);`
+   categories_count int);
+```
 
 Add Kafka file source connector for incoming events
 
