@@ -13,13 +13,15 @@ This project uses and expects specified software to be installed on a runtime en
 
 ## Project setup
 
-`git clone https://github.com/MaxNevermind/spark-streaming-example.git`
+```
+git clone https://github.com/MaxNevermind/spark-streaming-example.git
 
-`cd spark-streaming-example`
+cd spark-streaming-example
 
-`docker-compose up -d`
+sbt assembly
 
-`sbt assembly`
+docker-compose up -d
+```
 
 Create a topic for incoming events
 
@@ -27,21 +29,23 @@ Create a topic for incoming events
 
 Create Cassandra key space and table
 
-`docker exec -it cassandra /bin/bash`
+```
+docker exec -it cassandra /bin/bash
 
-`cqlsh`
+cqlsh
 
-`CREATE KEYSPACE standalone
+CREATE KEYSPACE standalone
   WITH REPLICATION = { 
    'class' : 'SimpleStrategy', 
    'replication_factor' : 1 
-  };`
-  
-`CREATE TABLE standalone.blocked_ips (
+  };
+
+CREATE TABLE standalone.blocked_ips (
    ip text PRIMARY KEY, 
    request_count int, 
    click_view_ratio float, 
-   categories_count int);`
+   categories_count int);
+```
 
 Add Kafka file source connector for incoming events
 
@@ -54,22 +58,26 @@ Start events generator
 
 Start spark application
 
-`docker exec -it spark /bin/bash`
+```
+docker exec -it spark /bin/bash
 
-`mkdir /tmp/spark-events`
+mkdir /tmp/spark-events
 
-`/usr/share/spark/bin/spark-submit \
+/usr/share/spark/bin/spark-submit \
 --class StreamingApp \
 --master local[2] \
-/usr/share/streaming_task/target/scala-2.11/streaming_task-assembly-0.1.0-SNAPSHOT.jar`
+/usr/share/streaming_task/target/scala-2.11/streaming_task-assembly-0.1.0-SNAPSHOT.jar
+```
 
 Check the result in Cassandra
 
-`docker exec -it cassandra /bin/bash`
+```
+docker exec -it cassandra /bin/bash
 
-`cqlsh`
+cqlsh
 
-`SELECT * FROM standalone.blocked_ips LIMIT 10;`   
+SELECT * FROM standalone.blocked_ips LIMIT 10;
+```
 
 
 ## Utility commands
