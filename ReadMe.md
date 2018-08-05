@@ -25,7 +25,9 @@ docker-compose up -d
 
 Create a topic for incoming events
 
-`docker exec broker kafka-topics --create --zookeeper zookeeper:2181 --replication-factor 1 --partitions 3 --topic incoming-events`
+```
+docker exec broker kafka-topics --create --zookeeper zookeeper:2181 --replication-factor 1 --partitions 3 --topic incoming-events
+```
 
 Create Cassandra key space and table
 
@@ -47,14 +49,19 @@ CREATE TABLE standalone.blocked_ips (
    categories_count int);
 ```
 
+
 Add Kafka file source connector for incoming events
 
-`curl --header "Content-Type: application/json" --request POST --data '{"name":"FileStreamSourceConnector","config":{"connector.class":"org.apache.kafka.connect.file.FileStreamSourceConnector","tasks.max":"1","topic":"incoming-events","key.converter":"org.apache.kafka.connect.storage.StringConverter","value.converter":"org.apache.kafka.connect.storage.StringConverter","file":"/usr/share/streaming_task/events/events.json"}}' \
-http://localhost:8083/connectors`
+```
+curl --header "Content-Type: application/json" --request POST --data '{"name":"FileStreamSourceConnector","config":{"connector.class":"org.apache.kafka.connect.file.FileStreamSourceConnector","tasks.max":"1","topic":"incoming-events","key.converter":"org.apache.kafka.connect.storage.StringConverter","value.converter":"org.apache.kafka.connect.storage.StringConverter","file":"/usr/share/streaming_task/events/events.json"}}' http://localhost:8083/connectors
+```
+
 
 Start events generator
 
-`python3 ./src/main/python/botgen.py --file ./events/events.json --duration 5`
+```
+python3 ./src/main/python/botgen.py --file ./events/events.json --duration 5
+```
 
 Start spark application
 
@@ -84,13 +91,19 @@ SELECT * FROM standalone.blocked_ips LIMIT 10;
 
 Get list of topics
 
-`docker exec broker kafka-topics --list --zookeeper zookeeper:2181`
+```
+docker exec broker kafka-topics --list --zookeeper zookeeper:2181
+```
 
 Get the first 10 messages from a topic
 
-`docker exec broker kafka-console-consumer --bootstrap-server broker:9092 --topic incoming-events --from-beginning --max-messages 10`
+```
+docker exec broker kafka-console-consumer --bootstrap-server broker:9092 --topic incoming-events --from-beginning --max-messages 10
+```
 
 Reset offset for spark consumer
 
-`docker exec broker kafka-consumer-groups --bootstrap-server broker:9092 --group spark_consumer --topic incoming-events --reset-offsets --to-earliest --execute`
+```
+docker exec broker kafka-consumer-groups --bootstrap-server broker:9092 --group spark_consumer --topic incoming-events --reset-offsets --to-earliest --execute
+```
 
