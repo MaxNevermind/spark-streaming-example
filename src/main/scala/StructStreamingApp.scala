@@ -1,11 +1,12 @@
 import java.lang
+import java.sql.Timestamp
 import java.time.Instant
 
 import StreamingApp.{CassandraSqlInsert, log}
 import com.datastax.driver.core.Session
 import com.datastax.spark.connector.cql.CassandraConnector
 import org.apache.spark.sql.{ForeachWriter, SparkSession}
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.sql.types._
 import org.slf4j.LoggerFactory
 
@@ -35,9 +36,8 @@ object StructStreamingApp extends App {
 
   val KafkaBroker = if (DevelopmentMode) "localhost:29092" else "broker:9092"
   val KafkaTopic = "incoming-events"
-  val KafkaConsumer = "spark_consumer"
 
-
+  val checkpointPath = "/Users/mkonstantinov/Downloads/checkpoint/"
 
   val spark = SparkSession.builder()
     .master("local[*]")
@@ -63,69 +63,86 @@ object StructStreamingApp extends App {
 
   val in = spark.readStream
     .schema(schemaExp)
+//    .format("kafka")
+//    .option("kafka.bootstrap.servers", KafkaBroker)
+//    .option("topic", KafkaTopic)
     .format("json")
     .option("path", "/Users/mkonstantinov/IdeaProjects/streaming_task/events")
     .load()
+    .withColumnRenamed("unix_time", "timestamp")
+    .withColumnRenamed("category_id", "categoryId")
+    .withColumnRenamed("type", "eventType")
     .as[Event]
 
   def currentTimestamp: Long = Instant.now().toEpochMilli
 
-  val qwe = {
-    case Event(_, timestamp, _, _) =>
-      if ((currentTimestamp - timestamp) < BotMaxBlockTimeMs) true
-      else false
-  }
-
   val out = in
-    .withWatermark("timestamp", "11 minutes")
-    .groupBy(window($"timestamp", "10 minutes", "30 seconds"), $"ip")
+    .groupBy(window($"timestamp", "10 days", "5 seconds"), $"ip")
     .agg(
       count($"categoryId").as("eventCount"),
-      countDistinct($"categoryId").as("categoriesCount"),
-      count(when($"eventType" === "click", 1).otherwise(0)).as("clickEventCount"),
-      count(when($"eventType" === "view", 1).otherwise(0)).as("viewEventCount")
+      approx_count_distinct($"categoryId").as("categoriesCount"),
+      sum(when($"eventType" === "click", 1).otherwise(0)).as("clickEventCount"),
+      sum(when($"eventType" === "view", 1).otherwise(0)).as("viewEventCount")
     )
     .as[EventAgg]
-    .filter( _ match {
-      case EventAgg(ip, eventCount, categoriesCount, clickEventCount, viewEventCount) =>
-        eventCount > BotMaxEventThreshold ||
-          categoriesCount > BotMaxCategoriesThreshold ||
-          (viewEventCount != 0 && (clickEventCount /  viewEventCount) > BotMaxClickVewRatio)
-    })
     .writeStream
+    .format("console")
     .outputMode(OutputMode.Update())
-    .foreach(new ForeachWriter[EventAgg] {
-      var session: Session = _
-      def open(partitionId: Long, version: Long): Boolean = {
-        session = cc.openSession()
-        true
-      }
-      def process(record: EventAgg): Unit = {
-        val preparedStmnt = session.prepare(CassandraSqlInsert)
-        record match { case EventAgg(ip, eventCount, categoriesCount, clickEventCount, viewEventCount) =>
-          val clickVewRatio = if (viewEventCount == 0) 0 else 1.0 * (clickEventCount / viewEventCount)
-          log.info(s"Adding a bot to Cassandra " +
-            s"ip: $ip eventCount: $eventCount categoriesCount: $categoriesCount clickVewRatio: $clickVewRatio")
-          session.execute(
-            preparedStmnt.bind(
-              ip,
-              new java.lang.Integer(eventCount.toInt),
-              new lang.Float(clickVewRatio),
-              new java.lang.Integer(categoriesCount.toInt)
-            )
-          )
-        }
-      }
-      def close(errorOrNull: Throwable): Unit = {}
-    })
     .start()
-
   out.awaitTermination()
 
+//  val out = in
+//    .withWatermark("timestamp", "30 days")
+//    .groupBy(window($"timestamp", "30 days", "2 seconds"), $"ip")
+////    .withWatermark("timestamp", "11 minutes")
+////    .groupBy(window($"timestamp", "10 minutes", "30 seconds"), $"ip")
+//    .agg(
+//      count($"categoryId").as("eventCount"),
+//      approx_count_distinct($"categoryId").as("categoriesCount"),
+//      sum(when($"eventType" === "click", 1).otherwise(0)).as("clickEventCount"),
+//      sum(when($"eventType" === "view", 1).otherwise(0)).as("viewEventCount")
+//    )
+//    .as[EventAgg]
+////    .filter( _ match {
+////      case EventAgg(ip, eventCount, categoriesCount, clickEventCount, viewEventCount) =>
+////        eventCount > BotMaxEventThreshold ||
+////          categoriesCount > BotMaxCategoriesThreshold ||
+////          (viewEventCount != 0 && (clickEventCount /  viewEventCount) > BotMaxClickVewRatio)
+////    })
+//    .writeStream
+//    .outputMode(OutputMode.Update())
+////    .trigger(Trigger.ProcessingTime("1 seconds"))
+////    .option("checkpointLocation", checkpointPath)
+//    .foreach(new ForeachWriter[EventAgg] {
+//      var session: Session = _
+//      def open(partitionId: Long, version: Long): Boolean = {
+//        session = cc.openSession()
+//        true
+//      }
+//      def process(record: EventAgg): Unit = {
+//        val preparedStmnt = session.prepare(CassandraSqlInsert)
+//        record match { case EventAgg(ip, eventCount, categoriesCount, clickEventCount, viewEventCount) =>
+//          val clickVewRatio = if (viewEventCount == 0) 0 else 1.0 * (clickEventCount / viewEventCount)
+//          log.info(s"Adding a bot to Cassandra " +
+//            s"ip: $ip eventCount: $eventCount categoriesCount: $categoriesCount clickVewRatio: $clickVewRatio")
+//          session.execute(
+//            preparedStmnt.bind(
+//              ip,
+//              new java.lang.Integer(eventCount.toInt),
+//              new lang.Float(clickVewRatio),
+//              new java.lang.Integer(categoriesCount.toInt)
+//            )
+//          )
+//        }
+//      }
+//      def close(errorOrNull: Throwable): Unit = {}
+//    })
+//    .start()
+//
+//  out.awaitTermination()
 
 }
 
-case class Event(ip: String, timestamp: Long, categoryId: Int, eventType: String)
 case class EventAgg(ip: String, eventCount: Long, categoriesCount: Long, clickEventCount: Long, viewEventCount: Long)
 
 

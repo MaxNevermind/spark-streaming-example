@@ -1,5 +1,6 @@
 
 import java.lang
+import java.sql.Timestamp
 import java.time.Instant
 
 import com.datastax.spark.connector.cql.CassandraConnector
@@ -109,7 +110,7 @@ object StreamingApp {
   def kafkaRecord2CaseClass(consumerRecord: ConsumerRecord[String, String]): Option[Event] = Try({
     val json = Json.parse(consumerRecord.value())
     val categoryId = (json \ "category_id").get.as[Int]
-    val timestamp = (json \ "unix_time").get.as[Long] * 1000
+    val timestamp = new Timestamp((json \ "unix_time").get.as[Long])
     val ip = (json \ "ip").get.as[String]
     val eventType = (json \ "type").get.as[String]
     Event(ip, timestamp, categoryId, eventType)
@@ -126,7 +127,7 @@ object StreamingApp {
     rdd
       .filter {
         case Event(_, timestamp, _, _) =>
-          if ((currentTimestamp - timestamp) < BotMaxBlockTimeMs) true
+          if ((currentTimestamp - timestamp.getTime) < BotMaxBlockTimeMs) true
           else false
       }
       .map {
@@ -173,5 +174,6 @@ object StreamingApp {
 
 }
 
-case class Event(ip: String, timestamp: Long, categoryId: Int, eventType: String)
+case class Event(ip: String, timestamp: Timestamp, categoryId: Int, eventType: String)
+
 
