@@ -22,7 +22,7 @@ object StreamingApp {
 
   private val log = LoggerFactory.getLogger(this.getClass)
 
-  val DevelopmentMode = false
+  val DevelopmentMode = true
 
   val BotMaxBlockTimeMs = 10 * 60 * 1000
   val MaxEventLagMs = 30 * 1000

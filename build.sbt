@@ -12,7 +12,7 @@ scalaVersion := "2.11.11"
 dependencyOverrides += "com.fasterxml.jackson.core" %  "jackson-core" % "2.6.5"
 dependencyOverrides += "com.fasterxml.jackson.core" %  "jackson-databind" % "2.6.5"
 
-val developmentMode = false
+val developmentMode = true
 val scope = if (developmentMode) "compile" else "provided"
 
 libraryDependencies += sparkCore % scope

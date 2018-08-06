@@ -1,0 +1,131 @@
+import java.lang
+import java.time.Instant
+
+import StreamingApp.{CassandraSqlInsert, log}
+import com.datastax.driver.core.Session
+import com.datastax.spark.connector.cql.CassandraConnector
+import org.apache.spark.sql.{ForeachWriter, SparkSession}
+import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.types._
+import org.slf4j.LoggerFactory
+
+import scala.collection.mutable
+
+
+object StructStreamingApp extends App {
+
+  private val log = LoggerFactory.getLogger(this.getClass)
+
+  val DevelopmentMode = true
+
+  val BotMaxBlockTimeMs = 10 * 60 * 1000
+  val MaxEventLagMs = 30 * 1000
+
+  val BotMaxEventThreshold = 20
+  val BotMaxClickVewRatio = 5
+  val BotMaxCategoriesThreshold = 5
+
+  val CassandraHost = if (DevelopmentMode) "localhost" else "cassandra"
+  val CassandraPort = "9042"
+  val CassandraSqlInsert = s"""
+                              |INSERT INTO standalone.blocked_ips (ip, request_count, click_view_ratio, categories_count)
+                              |  VALUES(?, ?, ?, ?)
+                              |USING TTL ${BotMaxBlockTimeMs / 1000};
+                           """.stripMargin
+
+  val KafkaBroker = if (DevelopmentMode) "localhost:29092" else "broker:9092"
+  val KafkaTopic = "incoming-events"
+  val KafkaConsumer = "spark_consumer"
+
+
+
+  val spark = SparkSession.builder()
+    .master("local[*]")
+    .config("spark.driver.memory", "2g")
+    .appName("spark_local")
+    .enableHiveSupport()
+    .getOrCreate()
+  spark
+    .sparkContext
+    .setLogLevel("WARN")
+  val cc = CassandraConnector(spark.sparkContext)
+
+
+  import spark.implicits._
+  import org.apache.spark.sql.functions._
+
+  val schemaExp = StructType(
+      StructField("unix_time", TimestampType, nullable = false) ::
+      StructField("category_id", IntegerType, nullable = false) ::
+      StructField("ip", StringType, nullable = false) ::
+      StructField("type", StringType, nullable = false) :: Nil
+    )
+
+  val in = spark.readStream
+    .schema(schemaExp)
+    .format("json")
+    .option("path", "/Users/mkonstantinov/IdeaProjects/streaming_task/events")
+    .load()
+    .as[Event]
+
+  def currentTimestamp: Long = Instant.now().toEpochMilli
+
+  val qwe = {
+    case Event(_, timestamp, _, _) =>
+      if ((currentTimestamp - timestamp) < BotMaxBlockTimeMs) true
+      else false
+  }
+
+  val out = in
+    .withWatermark("timestamp", "11 minutes")
+    .groupBy(window($"timestamp", "10 minutes", "30 seconds"), $"ip")
+    .agg(
+      count($"categoryId").as("eventCount"),
+      countDistinct($"categoryId").as("categoriesCount"),
+      count(when($"eventType" === "click", 1).otherwise(0)).as("clickEventCount"),
+      count(when($"eventType" === "view", 1).otherwise(0)).as("viewEventCount")
+    )
+    .as[EventAgg]
+    .filter( _ match {
+      case EventAgg(ip, eventCount, categoriesCount, clickEventCount, viewEventCount) =>
+        eventCount > BotMaxEventThreshold ||
+          categoriesCount > BotMaxCategoriesThreshold ||
+          (viewEventCount != 0 && (clickEventCount /  viewEventCount) > BotMaxClickVewRatio)
+    })
+    .writeStream
+    .outputMode(OutputMode.Update())
+    .foreach(new ForeachWriter[EventAgg] {
+      var session: Session = _
+      def open(partitionId: Long, version: Long): Boolean = {
+        session = cc.openSession()
+        true
+      }
+      def process(record: EventAgg): Unit = {
+        val preparedStmnt = session.prepare(CassandraSqlInsert)
+        record match { case EventAgg(ip, eventCount, categoriesCount, clickEventCount, viewEventCount) =>
+          val clickVewRatio = if (viewEventCount == 0) 0 else 1.0 * (clickEventCount / viewEventCount)
+          log.info(s"Adding a bot to Cassandra " +
+            s"ip: $ip eventCount: $eventCount categoriesCount: $categoriesCount clickVewRatio: $clickVewRatio")
+          session.execute(
+            preparedStmnt.bind(
+              ip,
+              new java.lang.Integer(eventCount.toInt),
+              new lang.Float(clickVewRatio),
+              new java.lang.Integer(categoriesCount.toInt)
+            )
+          )
+        }
+      }
+      def close(errorOrNull: Throwable): Unit = {}
+    })
+    .start()
+
+  out.awaitTermination()
+
+
+}
+
+case class Event(ip: String, timestamp: Long, categoryId: Int, eventType: String)
+case class EventAgg(ip: String, eventCount: Long, categoriesCount: Long, clickEventCount: Long, viewEventCount: Long)
+
+
