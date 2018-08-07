@@ -8,6 +8,7 @@ object Dependencies {
   val sparkHive = "org.apache.spark" %% "spark-hive" % sparkVersion
   val sparkStreaming = "org.apache.spark" %% "spark-streaming" % sparkVersion
   val sparkStreamingKafka = "org.apache.spark" %% "spark-streaming-kafka-0-10" % sparkVersion
+  val sparkStreamingSqlKafka = "org.apache.spark" %% "spark-sql-kafka-0-10" % sparkVersion
 
   val sparkCassandraConnector = "com.datastax.spark" %% "spark-cassandra-connector" % "2.0.9"
 

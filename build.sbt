@@ -21,6 +21,7 @@ libraryDependencies += sparkHive % scope
 libraryDependencies += sparkStreaming % scope
 
 libraryDependencies += sparkStreamingKafka
+libraryDependencies += sparkStreamingSqlKafka
 libraryDependencies += playJson
 libraryDependencies += sparkCassandraConnector
 

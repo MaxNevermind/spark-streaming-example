@@ -2,25 +2,25 @@ import java.lang
 import java.sql.Timestamp
 import java.time.Instant
 
-import StreamingApp.{CassandraSqlInsert, log}
+import StreamingApp.{CassandraSqlInsert, createSsc, jsonString2Event, log}
 import com.datastax.driver.core.Session
 import com.datastax.spark.connector.cql.CassandraConnector
 import org.apache.spark.sql.{ForeachWriter, SparkSession}
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.sql.types._
+import org.apache.spark.streaming.StreamingContext
 import org.slf4j.LoggerFactory
 
 import scala.collection.mutable
 
 
-object StructStreamingApp extends App {
+object StructStreamingApp extends Utils {
 
-  private val log = LoggerFactory.getLogger(this.getClass)
+  @transient private lazy val log = LoggerFactory.getLogger(this.getClass)
 
   val DevelopmentMode = true
 
   val BotMaxBlockTimeMs = 10 * 60 * 1000
-  val MaxEventLagMs = 30 * 1000
 
   val BotMaxEventThreshold = 20
   val BotMaxClickVewRatio = 5
@@ -37,109 +37,82 @@ object StructStreamingApp extends App {
   val KafkaBroker = if (DevelopmentMode) "localhost:29092" else "broker:9092"
   val KafkaTopic = "incoming-events"
 
-  val checkpointPath = "/Users/mkonstantinov/Downloads/checkpoint/"
-
-  val spark = SparkSession.builder()
-    .master("local[*]")
-    .config("spark.driver.memory", "2g")
-    .appName("spark_local")
-    .enableHiveSupport()
-    .getOrCreate()
-  spark
-    .sparkContext
-    .setLogLevel("WARN")
-  val cc = CassandraConnector(spark.sparkContext)
+  val CheckpointPath = "/Users/mkonstantinov/Downloads/checkpoint/"
 
 
-  import spark.implicits._
-  import org.apache.spark.sql.functions._
+  def main(args: Array[String]): Unit = {
 
-  val schemaExp = StructType(
-      StructField("unix_time", TimestampType, nullable = false) ::
-      StructField("category_id", IntegerType, nullable = false) ::
-      StructField("ip", StringType, nullable = false) ::
-      StructField("type", StringType, nullable = false) :: Nil
-    )
+    val spark = SparkSession.builder()
+      .master("local[*]")
+      .config("spark.driver.memory", "2g")
+      .appName("spark_local")
+      .enableHiveSupport()
+      .getOrCreate()
+    val cc = CassandraConnector(spark.sparkContext)
 
-  val in = spark.readStream
-    .schema(schemaExp)
-//    .format("kafka")
-//    .option("kafka.bootstrap.servers", KafkaBroker)
-//    .option("topic", KafkaTopic)
-    .format("json")
-    .option("path", "/Users/mkonstantinov/IdeaProjects/streaming_task/events")
-    .load()
-    .withColumnRenamed("unix_time", "timestamp")
-    .withColumnRenamed("category_id", "categoryId")
-    .withColumnRenamed("type", "eventType")
-    .as[Event]
+    import spark.implicits._
+    import org.apache.spark.sql.functions._
 
-  def currentTimestamp: Long = Instant.now().toEpochMilli
+    val in = spark.readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", KafkaBroker)
+      .option("subscribe", KafkaTopic)
+      .option("startingOffsets", "earliest")
+      .load()
+      .map(record => {
+        jsonString2Event(new String(record.getAs[Array[Byte]]("value"))).orNull
+      })
+      .filter(_ != null)
+      .filter("current_timestamp > timestamp") // Filter out wrong rows so it can't break a watermark
 
-  val out = in
-    .groupBy(window($"timestamp", "10 days", "5 seconds"), $"ip")
-    .agg(
-      count($"categoryId").as("eventCount"),
-      approx_count_distinct($"categoryId").as("categoriesCount"),
-      sum(when($"eventType" === "click", 1).otherwise(0)).as("clickEventCount"),
-      sum(when($"eventType" === "view", 1).otherwise(0)).as("viewEventCount")
-    )
-    .as[EventAgg]
-    .writeStream
-    .format("console")
-    .outputMode(OutputMode.Update())
-    .start()
-  out.awaitTermination()
+    val out = in
+      .withWatermark("timestamp", "11 minutes")
+      .groupBy(window($"timestamp", "10 minutes", "30 seconds"), $"ip")
+      .agg(
+        count($"categoryId").as("eventCount"),
+        approx_count_distinct($"categoryId").as("categoriesCount"),
+        sum(when($"eventType" === "click", 1).otherwise(0)).as("clickEventCount"),
+        sum(when($"eventType" === "view", 1).otherwise(0)).as("viewEventCount")
+      )
+      .as[EventAgg]
+      .filter( _ match {
+        case EventAgg(ip, eventCount, categoriesCount, clickEventCount, viewEventCount) =>
+          eventCount > BotMaxEventThreshold ||
+            categoriesCount > BotMaxCategoriesThreshold ||
+            (viewEventCount != 0 && (clickEventCount /  viewEventCount) > BotMaxClickVewRatio)
+      })
+      .writeStream
+      .outputMode(OutputMode.Update())
+      .option("checkpointLocation", CheckpointPath)
+      .foreach(new ForeachWriter[EventAgg] {
+        var session: Session = _
+        def open(partitionId: Long, version: Long): Boolean = {
+          session = cc.openSession()
+          true
+        }
+        def process(record: EventAgg): Unit = {
+          val preparedStmnt = session.prepare(CassandraSqlInsert)
+          record match { case EventAgg(ip, eventCount, categoriesCount, clickEventCount, viewEventCount) =>
+            val clickVewRatio = if (viewEventCount == 0) 0 else 1.0 * (clickEventCount / viewEventCount)
+            log.info(s"Adding a bot to Cassandra " +
+              s"ip: $ip eventCount: $eventCount categoriesCount: $categoriesCount clickVewRatio: $clickVewRatio")
+            session.execute(
+              preparedStmnt.bind(
+                ip,
+                new java.lang.Integer(eventCount.toInt),
+                new lang.Float(clickVewRatio),
+                new java.lang.Integer(categoriesCount.toInt)
+              )
+            )
+          }
+        }
+        def close(errorOrNull: Throwable): Unit = {}
+      })
+      .start()
 
-//  val out = in
-//    .withWatermark("timestamp", "30 days")
-//    .groupBy(window($"timestamp", "30 days", "2 seconds"), $"ip")
-////    .withWatermark("timestamp", "11 minutes")
-////    .groupBy(window($"timestamp", "10 minutes", "30 seconds"), $"ip")
-//    .agg(
-//      count($"categoryId").as("eventCount"),
-//      approx_count_distinct($"categoryId").as("categoriesCount"),
-//      sum(when($"eventType" === "click", 1).otherwise(0)).as("clickEventCount"),
-//      sum(when($"eventType" === "view", 1).otherwise(0)).as("viewEventCount")
-//    )
-//    .as[EventAgg]
-////    .filter( _ match {
-////      case EventAgg(ip, eventCount, categoriesCount, clickEventCount, viewEventCount) =>
-////        eventCount > BotMaxEventThreshold ||
-////          categoriesCount > BotMaxCategoriesThreshold ||
-////          (viewEventCount != 0 && (clickEventCount /  viewEventCount) > BotMaxClickVewRatio)
-////    })
-//    .writeStream
-//    .outputMode(OutputMode.Update())
-////    .trigger(Trigger.ProcessingTime("1 seconds"))
-////    .option("checkpointLocation", checkpointPath)
-//    .foreach(new ForeachWriter[EventAgg] {
-//      var session: Session = _
-//      def open(partitionId: Long, version: Long): Boolean = {
-//        session = cc.openSession()
-//        true
-//      }
-//      def process(record: EventAgg): Unit = {
-//        val preparedStmnt = session.prepare(CassandraSqlInsert)
-//        record match { case EventAgg(ip, eventCount, categoriesCount, clickEventCount, viewEventCount) =>
-//          val clickVewRatio = if (viewEventCount == 0) 0 else 1.0 * (clickEventCount / viewEventCount)
-//          log.info(s"Adding a bot to Cassandra " +
-//            s"ip: $ip eventCount: $eventCount categoriesCount: $categoriesCount clickVewRatio: $clickVewRatio")
-//          session.execute(
-//            preparedStmnt.bind(
-//              ip,
-//              new java.lang.Integer(eventCount.toInt),
-//              new lang.Float(clickVewRatio),
-//              new java.lang.Integer(categoriesCount.toInt)
-//            )
-//          )
-//        }
-//      }
-//      def close(errorOrNull: Throwable): Unit = {}
-//    })
-//    .start()
-//
-//  out.awaitTermination()
+    out.awaitTermination()
+
+  }
 
 }
 

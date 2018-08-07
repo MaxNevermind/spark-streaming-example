@@ -19,9 +19,9 @@ import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 
-object StreamingApp {
+object StreamingApp extends Utils {
 
-  private val log = LoggerFactory.getLogger(this.getClass)
+  @transient private lazy val log = LoggerFactory.getLogger(this.getClass)
 
   val DevelopmentMode = true
 
@@ -76,7 +76,7 @@ object StreamingApp {
     val prevOffsets = mutable.HashSet[OffsetRange]()
 
     stream
-      .map(kafkaRecord2CaseClass)
+      .map(consumerRecord => jsonString2Event(consumerRecord.value()))
       .filter(_.nonEmpty)
       .map(_.get)
       .window(Minutes(11), Seconds(30))
@@ -105,20 +105,6 @@ object StreamingApp {
     }
 
     ssc
-  }
-
-  def kafkaRecord2CaseClass(consumerRecord: ConsumerRecord[String, String]): Option[Event] = Try({
-    val json = Json.parse(consumerRecord.value())
-    val categoryId = (json \ "category_id").get.as[Int]
-    val timestamp = new Timestamp((json \ "unix_time").get.as[Long])
-    val ip = (json \ "ip").get.as[String]
-    val eventType = (json \ "type").get.as[String]
-    Event(ip, timestamp, categoryId, eventType)
-  }) match {
-    case Success(x) => Some(x)
-    case Failure(f) =>
-      log.warn(s"Couldn't parse a row: ${consumerRecord.value()}", f)
-      None
   }
 
   def processRdd(rdd: RDD[Event], cc: CassandraConnector): Unit = {
