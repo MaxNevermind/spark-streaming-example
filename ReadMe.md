@@ -76,6 +76,9 @@ mkdir /tmp/spark-events
 /usr/share/streaming_task/target/scala-2.11/streaming_task-assembly-0.1.0-SNAPSHOT.jar
 ```
 
+For structured streaming use `StructStreamingApp` class name instead of `StreamingApp` in the last command above.
+
+
 Check the result in Cassandra
 
 ```
